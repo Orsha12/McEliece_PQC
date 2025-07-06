@@ -33,6 +33,27 @@ class McElieceGUI:
         style.configure("TLabelframe.Label", font=("Segoe UI", 12, "bold"), foreground="#005c99")
 
     def build_layout(self):
+        # Probability Inputs
+        prob_frame = ttk.LabelFrame(self.root, text="🎯 Error Probabilities", padding=15)
+        prob_frame.pack(fill="x", padx=20, pady=10)
+
+        ttk.Label(prob_frame, text="Decoder Error Probability (0–1):").grid(row=0, column=0, sticky="w", pady=5)
+        self.decoder_p_entry = ttk.Entry(prob_frame, width=10)
+        self.decoder_p_entry.insert(0, "0.03")
+        self.decoder_p_entry.grid(row=0, column=1, padx=10)
+
+        ttk.Label(prob_frame, text="Channel Error Probability (0–1):").grid(row=1, column=0, sticky="w", pady=5)
+        self.channel_p_entry = ttk.Entry(prob_frame, width=10)
+        self.channel_p_entry.insert(0, "0.02")
+        self.channel_p_entry.grid(row=1, column=1, padx=10)
+
+        ttk.Label(prob_frame, text="Number of Runs:").grid(row=2, column=0, sticky="w", pady=5)
+        self.runs_entry = ttk.Entry(prob_frame, width=10)
+        self.runs_entry.insert(0, "50")
+        self.runs_entry.grid(row=2, column=1, padx=10)
+
+        ttk.Button(prob_frame, text="📈 Run Channel Simulation", command=self.run_simulation).grid(row=3, column=0, columnspan=2, pady=10)
+
         # Input Stage
         input_frame = ttk.LabelFrame(self.root, text="🧾Input Stage", padding=15)
         input_frame.pack(fill="x", padx=20, pady=10)
@@ -133,6 +154,37 @@ class McElieceGUI:
 
 
 # Run the GUI
+
+    def run_simulation(self):
+        try:
+            decoder_p = float(self.decoder_p_entry.get())
+            channel_p = float(self.channel_p_entry.get())
+            runs = int(self.runs_entry.get())
+
+            msg_str = self.message_entry.get().strip().replace(" ", "")
+            use_message = msg_str if len(msg_str) == self.code.k and all(c in "01" for c in msg_str) else None
+
+            if use_message:
+                self.output_text.insert(tk.END, f"📨 Using user message: {msg_str}\n")
+            else:
+                self.output_text.insert(tk.END, f"📨 No valid user message found. Running with random messages.\n")
+
+            success_count = 0
+            total_error_sum = 0
+            for i in range(runs):
+                success, error_count = self.code.simulate_random_channel(decoder_p, channel_p, use_message)
+                success_count += success
+                total_error_sum += error_count
+
+            success_rate = success_count / runs * 100
+            avg_errors = total_error_sum / runs
+
+            self.output_text.insert(tk.END, f"✅ Success Rate over {runs} runs: {success_rate:.2f}%\n")
+            self.output_text.insert(tk.END, f"📊 Average total errors per run: {avg_errors:.2f}\n\n")
+
+        except Exception as e:
+            self.output_text.insert(tk.END, f"❗ Simulation error: {str(e)}\n")
+
 if __name__ == "__main__":
     root = tk.Tk()
     app = McElieceGUI(root)

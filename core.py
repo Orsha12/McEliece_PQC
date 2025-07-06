@@ -284,6 +284,13 @@ def create_error_vector(length, errors_num):
     # Return the generated error vector
     return err
 
+def apply_channel_noise(codeword, channel_error_prob):
+    """
+    Applies bit-wise noise to the codeword using the given channel error probability.
+    Returns a channel error vector and the noisy codeword.
+    """
+    channel_error = GF2([1 if random.random() < channel_error_prob else 0 for _ in range(len(codeword))])
+    return channel_error, codeword + channel_error  # Over GF(2)
 
 class LinearCode:
     def __init__(self, A, S, P):
@@ -359,6 +366,43 @@ class LinearCode:
             print(f"Message mismatch :(. Expected: {message}, but got: {estimated_message}")
         return int(np.array_equal(message, estimated_message))
 
+    def simulate_random_channel(self, decoder_error_prob, channel_error_prob, user_message=None):
+        """
+        Simulate encryption + channel noise + decoding.
+        If user_message is provided, use it. Otherwise, use a random one.
+        Retry if total error exceeds max correctable errors.
+        """
+        while True:
+            message = GF2([int(b) for b in user_message]) if user_message else GF2.Random(self.k)
+
+            decoder_error = GF2([1 if random.random() < decoder_error_prob else 0 for _ in range(self.n)])
+            intermediate_cipher = self.encode(message, decoder_error)
+
+            channel_error = GF2([1 if random.random() < channel_error_prob else 0 for _ in range(self.n)])
+            final_cipher = intermediate_cipher + channel_error
+
+            total_error = decoder_error + channel_error
+            total_weight = sum(total_error.tolist())
+
+            if total_weight <= self.max_errors_num:
+                break
+
+        expected_estimated_error = total_error @ self.P.T
+        expected_syndrome = expected_estimated_error @ self.H.T
+        decoded = self.decode(final_cipher, expected_estimated_error, expected_syndrome)
+        decoded_success = int(np.array_equal(decoded, message))
+        correctable = int(total_weight <= self.max_errors_num)
+
+        # Only success if decoded correctly AND error count was within correction bounds
+        return (1 if decoded_success and correctable else 0), total_weight
+
+    def run_channel_simulations(self, decoder_p, channel_p, runs=100):
+        successes = 0
+        for _ in range(runs):
+            successes += self.simulate_random_channel(decoder_p, channel_p)
+        success_rate = successes / runs * 100
+        print(f"Decoder p = {decoder_p:.2%}, Channel p = {channel_p:.2%} => Success Rate = {success_rate:.2f}%")
+        return success_rate
 
 if __name__ == "__main__":
 
